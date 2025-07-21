@@ -181,12 +181,12 @@ func Collect[E any](input *Pipe[E]) []E {
 	return result
 }
 
-func Window[E any](input *Pipe[E], windowSize int, timeout time.Duration) *Pipe[[]E] {
+func Batch[E any](input *Pipe[E], batchSize int, timeout time.Duration) *Pipe[[]E] {
 	output := make(chan []E)
 
 	go func() {
 		defer close(output)
-		buffer := make([]E, 0, windowSize)
+		buffer := make([]E, 0, batchSize)
 		timer := time.NewTimer(timeout)
 
 		for {
@@ -207,14 +207,14 @@ func Window[E any](input *Pipe[E], windowSize int, timeout time.Duration) *Pipe[
 				}
 
 				buffer = append(buffer, data)
-				if len(buffer) == windowSize {
+				if len(buffer) == batchSize {
 					// output <- buffer
 					select {
 					case output <- buffer:
 					case <-input.ctx.Done():
 						return
 					}
-					buffer = make([]E, 0, windowSize)
+					buffer = make([]E, 0, batchSize)
 					timer.Reset(timeout)
 				}
 
@@ -226,7 +226,7 @@ func Window[E any](input *Pipe[E], windowSize int, timeout time.Duration) *Pipe[
 					case <-input.ctx.Done():
 						return
 					}
-					buffer = make([]E, 0, windowSize)
+					buffer = make([]E, 0, batchSize)
 				}
 				timer.Reset(timeout)
 			}

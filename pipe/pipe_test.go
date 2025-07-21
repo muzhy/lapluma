@@ -357,7 +357,82 @@ func TestPipeMapParallelOrder(t *testing.T) {
 			break
 		}
 	}
-
+	// 这里有小概率是顺序的,特别是当系统负载高导致没有发现并行时
 	assert.False(t, isSequential,
 		"Processing order should not be sequential in parallel execution")
+}
+
+// pipe_test.go
+func TestBatch(t *testing.T) {
+	t.Run("固定大小分批", func(t *testing.T) {
+		ctx := context.Background()
+		data := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+		p := FromSlice(data, ctx)
+
+		batched := Batch(p, 3, time.Second)
+		results := Collect(batched)
+
+		expected := [][]int{
+			{1, 2, 3},
+			{4, 5, 6},
+			{7, 8, 9},
+			{10},
+		}
+		assert.Equal(t, expected, results)
+	})
+
+	t.Run("超时分批", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		input := make(chan int)
+		p := Create(input, ctx)
+
+		go func() {
+			defer close(input)
+			for i := 1; i <= 5; i++ {
+				select {
+				case input <- i:
+					time.Sleep(300 * time.Millisecond)
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+
+		batched := Batch(p, 10, 500*time.Millisecond)
+		results := Collect(batched)
+
+		// 预期：300ms * 2 = 600ms > 500ms
+		// 应分成三批: [1,2], [3,4], [5]
+		assert.Equal(t, [][]int{{1, 2}, {3, 4}, {5}}, results)
+	})
+
+	t.Run("上下文取消", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		input := make(chan int)
+		p := Create(input, ctx)
+
+		go func() {
+			defer close(input)
+			for i := 0; i < 100; i++ {
+				select {
+				case input <- i:
+					time.Sleep(50 * time.Millisecond)
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+
+		batched := Batch(p, 10, time.Second)
+		go func() {
+			results := Collect(batched)
+			assert.True(t, len(results) < 10, "应提前终止")
+		}()
+
+		time.Sleep(time.Second)
+		// 取消上下文
+		cancel()
+	})
 }
