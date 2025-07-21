@@ -1,7 +1,6 @@
-package iterator_test
+package iterator
 
 import (
-	"lapluma/iterator"
 	"reflect"
 	"strconv"
 	"testing"
@@ -11,24 +10,24 @@ import (
 
 func TestFromSlice(t *testing.T) {
 	data := []int{1, 2, 3}
-	it := iterator.FromSlice(data)
+	it := FromSlice(data)
 
-	result := iterator.Collect(it)
+	result := Collect(it)
 	assert.Equal(t, data, result, "FromSlice should create an iterator that yields all elements of the slice")
 
 	// 测试空切片
-	itEmpty := iterator.FromSlice([]int{})
-	resultEmpty := iterator.Collect(itEmpty)
+	itEmpty := FromSlice([]int{})
+	resultEmpty := Collect(itEmpty)
 	assert.Empty(t, resultEmpty, "FromSlice with an empty slice should result in an empty iterator")
 }
 
 // 测试从 Map 创建迭代器
 func TestFromMap(t *testing.T) {
 	data := map[string]int{"a": 1, "b": 2}
-	it := iterator.FromMap(data)
+	it := FromMap(data)
 
 	// 从迭代器收集结果
-	pairs := iterator.Collect(it)
+	pairs := Collect(it)
 
 	// 验证结果
 	assert.Equal(t, 2, len(pairs), "FromMap should create an iterator with the same number of elements as the map")
@@ -44,14 +43,14 @@ func TestFromMap(t *testing.T) {
 // 测试 Filter 函数
 func TestFilter(t *testing.T) {
 	data := []int{1, 2, 3, 4, 5, 6}
-	it := iterator.FromSlice(data)
+	it := FromSlice(data)
 
 	// 过滤出偶数
-	filteredIt := iterator.Filter(it, func(e int) bool {
+	filteredIt := Filter(it, func(e int) bool {
 		return e%2 == 0
 	})
 
-	result := iterator.Collect(filteredIt)
+	result := Collect(filteredIt)
 	expected := []int{2, 4, 6}
 	assert.Equal(t, expected, result, "Filter should correctly filter elements based on the predicate")
 }
@@ -59,14 +58,14 @@ func TestFilter(t *testing.T) {
 // 测试 Map 函数
 func TestMap(t *testing.T) {
 	data := []int{1, 2, 3}
-	it := iterator.FromSlice(data)
+	it := FromSlice(data)
 
 	// 将整数转换为字符串
-	mappedIt := iterator.Map(it, func(e int) string {
+	mappedIt := Map(it, func(e int) string {
 		return "v" + strconv.Itoa(e)
 	})
 
-	result := iterator.Collect(mappedIt)
+	result := Collect(mappedIt)
 	expected := []string{"v1", "v2", "v3"}
 	assert.Equal(t, expected, result, "Map should correctly transform each element")
 }
@@ -74,17 +73,17 @@ func TestMap(t *testing.T) {
 // 测试 Reduce 函数
 func TestReduce(t *testing.T) {
 	data := []int{1, 2, 3, 4}
-	it := iterator.FromSlice(data)
+	it := FromSlice(data)
 
 	// 计算总和
-	sum := iterator.Reduce(it, func(acc int, e int) int {
+	sum := Reduce(it, func(acc int, e int) int {
 		return acc + e
 	}, 0)
 
 	assert.Equal(t, 10, sum, "Reduce should correctly accumulate the values")
 
 	// 测试初始值
-	sumWithInitial := iterator.Reduce(iterator.FromSlice(data), func(acc int, e int) int {
+	sumWithInitial := Reduce(FromSlice(data), func(acc int, e int) int {
 		return acc + e
 	}, 10)
 	assert.Equal(t, 20, sumWithInitial, "Reduce should work correctly with a non-zero initial value")
@@ -101,10 +100,10 @@ func TestGroup(t *testing.T) {
 		{Name: "Bob", City: "Tokyo"},
 		{Name: "Charlie", City: "New York"},
 	}
-	it := iterator.FromSlice(data)
+	it := FromSlice(data)
 
 	// 按城市分组
-	grouped := iterator.Group(it, func(p Person) (string, string) {
+	grouped := Group(it, func(p Person) (string, string) {
 		return p.City, p.Name
 	})
 
@@ -122,7 +121,7 @@ func TestGroup(t *testing.T) {
 // 测试 Collect 函数
 func TestCollect(t *testing.T) {
 	data := []int{10, 20, 30}
-	it := iterator.FromSlice(data)
-	result := iterator.Collect(it)
+	it := FromSlice(data)
+	result := Collect(it)
 	assert.Equal(t, data, result, "Collect should gather all iterator elements into a slice")
 }
