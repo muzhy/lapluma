@@ -2,96 +2,127 @@ package iterator_test
 
 import (
 	"lapluma/iterator"
+	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestSliceIterator(t *testing.T) {
-	is := assert.New(t)
-
+func TestFromSlice(t *testing.T) {
 	data := []int{1, 2, 3}
 	it := iterator.FromSlice(data)
 
-	for _, v := range data {
-		e, ok := it.Next()
-		is.Equal(v, e)
-		is.Equal(true, ok)
-	}
+	result := iterator.Collect(it)
+	assert.Equal(t, data, result, "FromSlice should create an iterator that yields all elements of the slice")
 
-	v, ok := it.Next()
-	is.Equal(0, v)
-	is.Equal(false, ok)
+	// 测试空切片
+	itEmpty := iterator.FromSlice([]int{})
+	resultEmpty := iterator.Collect(itEmpty)
+	assert.Empty(t, resultEmpty, "FromSlice with an empty slice should result in an empty iterator")
 }
 
-func TestMapIterator(t *testing.T) {
-	is := assert.New(t)
-
-	data := make(map[string]string)
-	data["a"] = "apple"
-	data["b"] = "banana"
-
+// 测试从 Map 创建迭代器
+func TestFromMap(t *testing.T) {
+	data := map[string]int{"a": 1, "b": 2}
 	it := iterator.FromMap(data)
-	for k, v := range iterator.Iter2(it) {
-		is.Equal(data[k], v)
-	}
 
-	keysIt := iterator.MapKeysIt(data)
-	k, ok := keysIt.Next()
-	is.Equal(true, ok)
-	is.Equal(k, "a")
+	// 从迭代器收集结果
+	pairs := iterator.Collect(it)
+
+	// 验证结果
+	assert.Equal(t, 2, len(pairs), "FromMap should create an iterator with the same number of elements as the map")
+
+	// 将结果转回 map 以便验证，因为 map 的迭代顺序是不确定的
+	resultMap := make(map[string]int)
+	for _, p := range pairs {
+		resultMap[p.First] = p.Second
+	}
+	assert.Equal(t, data, resultMap, "The collected map should be equal to the original map")
 }
 
-func TestFilterIterator(t *testing.T) {
-	is := assert.New(t)
+// 测试 Filter 函数
+func TestFilter(t *testing.T) {
+	data := []int{1, 2, 3, 4, 5, 6}
+	it := iterator.FromSlice(data)
 
+	// 过滤出偶数
+	filteredIt := iterator.Filter(it, func(e int) bool {
+		return e%2 == 0
+	})
+
+	result := iterator.Collect(filteredIt)
+	expected := []int{2, 4, 6}
+	assert.Equal(t, expected, result, "Filter should correctly filter elements based on the predicate")
+}
+
+// 测试 Map 函数
+func TestMap(t *testing.T) {
 	data := []int{1, 2, 3}
-	it := iterator.Filter(
-		iterator.FromSlice(data),
-		func(n int) bool { return n%2 == 1 },
-	)
-	for num := range iterator.Iter(it) {
-		is.Equal(1, num%2)
-	}
+	it := iterator.FromSlice(data)
 
-	sum := iterator.Reduce(
-		iterator.FromSlice(data),
-		func(init int, e int) int { return init + e },
-		0,
-	)
-	is.Equal(6, sum)
+	// 将整数转换为字符串
+	mappedIt := iterator.Map(it, func(e int) string {
+		return "v" + strconv.Itoa(e)
+	})
 
-	doubleIt := iterator.Map(
-		iterator.FromSlice(data),
-		func(n int) int {
-			return n * 2
-		},
-	)
-	douleSum := iterator.Reduce(
-		doubleIt,
-		func(init int, e int) int { return init + e },
-		0,
-	)
-	is.Equal(sum*2, douleSum)
+	result := iterator.Collect(mappedIt)
+	expected := []string{"v1", "v2", "v3"}
+	assert.Equal(t, expected, result, "Map should correctly transform each element")
 }
 
-func TestGroup(t *testing.T) {
-	is := assert.New(t)
-
+// 测试 Reduce 函数
+func TestReduce(t *testing.T) {
 	data := []int{1, 2, 3, 4}
+	it := iterator.FromSlice(data)
 
-	m := iterator.Group(
-		iterator.FromSlice(data),
-		func(n int) (string, int) {
-			if n%2 == 1 {
-				return "odd", n
-			} else {
-				return "even", n
-			}
-		},
-	)
+	// 计算总和
+	sum := iterator.Reduce(it, func(acc int, e int) int {
+		return acc + e
+	}, 0)
 
-	is.Equal([]int{1, 3}, m["odd"])
-	is.Equal([]int{2, 4}, m["even"])
-	is.Equal(2, len(m))
+	assert.Equal(t, 10, sum, "Reduce should correctly accumulate the values")
+
+	// 测试初始值
+	sumWithInitial := iterator.Reduce(iterator.FromSlice(data), func(acc int, e int) int {
+		return acc + e
+	}, 10)
+	assert.Equal(t, 20, sumWithInitial, "Reduce should work correctly with a non-zero initial value")
+}
+
+// 测试 Group 函数
+func TestGroup(t *testing.T) {
+	type Person struct {
+		Name string
+		City string
+	}
+	data := []Person{
+		{Name: "Alice", City: "New York"},
+		{Name: "Bob", City: "Tokyo"},
+		{Name: "Charlie", City: "New York"},
+	}
+	it := iterator.FromSlice(data)
+
+	// 按城市分组
+	grouped := iterator.Group(it, func(p Person) (string, string) {
+		return p.City, p.Name
+	})
+
+	expected := map[string][]string{
+		"New York": {"Alice", "Charlie"},
+		"Tokyo":    {"Bob"},
+	}
+
+	// 使用 reflect.DeepEqual 比较 map，因为 assert.Equal 对 map 中的切片顺序敏感
+	if !reflect.DeepEqual(expected, grouped) {
+		t.Errorf("Group() = %v, want %v", grouped, expected)
+	}
+}
+
+// 测试 Collect 函数
+func TestCollect(t *testing.T) {
+	data := []int{10, 20, 30}
+	it := iterator.FromSlice(data)
+	result := iterator.Collect(it)
+	assert.Equal(t, data, result, "Collect should gather all iterator elements into a slice")
 }

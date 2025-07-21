@@ -1,4 +1,4 @@
-package lapluma
+package pipe
 
 import (
 	"context"
@@ -109,6 +109,7 @@ func Map[T, R any](inPipe *Pipe[T], trans func(T) R) *Pipe[R] {
 
 	return &Pipe[R]{
 		inChan: outChan,
+		ctx:    inPipe.ctx,
 	}
 }
 
@@ -126,4 +127,12 @@ func Group[K comparable, E, R any](inPipe *Pipe[E], extract func(E) (K, R)) map[
 		m[k] = append(m[k], r)
 	}
 	return m
+}
+
+func Collect[E any](inPipe *Pipe[E]) []E {
+	var result []E
+	for item := range inPipe.inChan {
+		result = append(result, item)
+	}
+	return result
 }
