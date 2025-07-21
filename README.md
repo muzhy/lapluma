@@ -53,11 +53,13 @@ positivePipe := Filter(pipe, func(n int) bool {
 
 ### 模式二：使用 TryMap 处理可失败的转换
 
-当数据转换过程本身可能失败时（例如，解析字符串、调用外部 API），我们提供了 TryMap 函数。它的 handler 签名为 func(T) (R, error)。当 handler 返回一个非 nil 的 error 时，TryMap 会自动跳过（丢弃） 这个元素，并继续处理下一个。这使得流水线可以在遭遇“数据级”错误时保持运行，而不会被中断。import (
+当数据转换过程本身可能失败时（例如，解析字符串、调用外部 API），我们提供了 TryMap 函数。它的 handler 签名为 func(T) (R, error)。当 handler 返回一个非 nil 的 error 时，TryMap 会自动跳过（丢弃） 这个元素，并继续处理下一个。这使得流水线可以在遭遇“数据级”错误时保持运行，而不会被中断。
+```go
+import (
     "strconv"
     "errors"
 )
-```go
+
 // 示例：将字符串转换为整数，失败则跳过
 stringPipe := FromSlice([]string{"1", "two", "3", "four"}, ctx)
 
