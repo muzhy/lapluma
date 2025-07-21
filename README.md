@@ -20,6 +20,22 @@
 - `Filter[E](it Iterator[E], filter func(E) bool) Iterator[E]`: 过滤不符合条件的元素。
 - `Reduce[E, R](it Iterator[E], handler func(R, E) R, initial R) R`: 将序列聚合为单个值。
 - `Collect[E](it Iterator[E]) []E`: 将迭代器中的所有元素收集到切片中。
+- `Iter[E any](it Iterator[E]) iter.Seq[E]` 和 `Iter2[K, V any](it Iterator[lapluma.Pair[K, V]]) iter.Seq2[K, V]`：创建符合`iter`包中定义的迭代器，支持通过`for-range`遍历
+
+**示例:**
+```go
+// 创建迭代器
+data := []int{1, 2, 3, 4, 5}
+it := iterator.FromSlice(data)
+
+// 链式操作
+result := iterator.Collect(
+    iterator.Filter(
+        iterator.Map(it, func(x int) int { return x * 2 }),
+        func(x int) bool { return x > 5 }
+    )
+) // [6, 8, 10]
+```
 
 ### 2. `Pipe` - 并发数据流
 
@@ -31,6 +47,40 @@
 - `FromSlice(data []E, ctx context.Context) *Pipe[E]`: 从切片创建并发管道。
 - `FromIterator(it iterator.Iterator[E], ctx context.Context) *Pipe[E]`: 从迭代器创建并发管道。
 - `Map`, `Filter`, `Reduce` 等函数与 `Iterator` 版本功能相同，但以并发方式执行。
+
+**示例:**
+```go
+ctx := context.Background()
+
+// 创建并发管道
+p := pipe.FromSlice([]int{1, 2, 3, 4, 5}, ctx)
+
+// 并行处理（3个工作协程）
+result := pipe.Collect(
+    pipe.Filter(
+        pipe.Map(p, cpuIntensiveTask, 3), // 并行度3
+        func(x int) bool { return x > 10 },
+        2, // 并行度2
+    )
+)
+```
+
+### 标准迭代器集成
+```go
+import "iter"
+
+// 转换为标准迭代器
+seq := iterator.Iter(myIterator)
+for value := range seq {
+    // 处理值
+}
+
+// 键值对迭代
+seq2 := iterator.Iter2(mapIterator)
+for k, v := range seq2 {
+    // 处理键值
+}
+```
 
 ## 错误处理
 
@@ -53,7 +103,7 @@ positivePipe := Filter(pipe, func(n int) bool {
 
 ### 模式二：使用 TryMap 处理可失败的转换
 
-当数据转换过程本身可能失败时（例如，解析字符串、调用外部 API），我们提供了 TryMap 函数。它的 handler 签名为 func(T) (R, error)。当 handler 返回一个非 nil 的 error 时，TryMap 会自动跳过（丢弃） 这个元素，并继续处理下一个。这使得流水线可以在遭遇“数据级”错误时保持运行，而不会被中断。
+当数据转换过程本身可能失败时（例如，解析字符串、调用外部 API），使用 TryMap 函数。它的 handler 签名为 func(T) (R, error)。当 handler 返回一个非 nil 的 error 时，TryMap 会自动跳过（丢弃） 这个元素，并继续处理下一个。这使得流水线可以在遭遇“数据级”错误时保持运行，而不会被中断。
 ```go
 import (
     "strconv"
@@ -77,6 +127,9 @@ intPipe := TryMap(stringPipe, func(s string) (int, error) {
 sum := Reduce(intPipe, func(acc, n int) int { return acc + n }, 0)
 // sum 的结果是 4
 ```
+
+### Other
+若需要收集`Map`过程中的错误,可以考虑使用在`util.go`中`Result[T]`作为返回值
 
 # 运行测试
 ```sh

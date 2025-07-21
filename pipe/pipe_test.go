@@ -2,9 +2,13 @@ package pipe
 
 import (
 	"context"
+	"fmt"
 	"reflect"
+	"runtime"
 	"sort"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -158,4 +162,202 @@ func TestPipeChaining(t *testing.T) {
 
 	expected := []string{"val10"}
 	assert.Equal(t, expected, result, "Pipe chaining should work correctly")
+}
+
+// 测试并行 TryMap
+func TestPipeTryMapParallel(t *testing.T) {
+	ctx := context.Background()
+	data := make([]string, 100)
+	for i := range data {
+		if i%10 == 0 {
+			data[i] = "error"
+		} else {
+			data[i] = strconv.Itoa(i)
+		}
+	}
+
+	p := FromSlice(data, ctx)
+
+	// 使用原子计数器跟踪处理数量
+	var processed uint64
+	tryMappedPipe := TryMap(p, func(s string) (int, error) {
+		atomic.AddUint64(&processed, 1)
+		time.Sleep(1 * time.Millisecond) // 模拟处理延迟
+		if s == "error" {
+			return 0, fmt.Errorf("invalid input")
+		}
+		return strconv.Atoi(s)
+	}, 10, 20) // 并行度10，缓冲区20
+
+	result := Collect(tryMappedPipe)
+
+	// 验证结果正确性（应跳过10个错误项）
+	assert.Len(t, result, 90, "Should skip 10 error elements")
+
+	// 验证并行处理
+	assert.Greater(t, atomic.LoadUint64(&processed), uint64(50),
+		"Parallel processing should handle more than 50 elements")
+}
+
+// 测试上下文取消时的并行处理
+func TestPipeParallelWithCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	data := make([]int, 100)
+	for i := range data {
+		data[i] = i
+	}
+
+	p := FromSlice(data, ctx)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	// 启动处理
+	go func() {
+		defer wg.Done()
+		Collect(Filter(p, func(e int) bool {
+			time.Sleep(10 * time.Millisecond)
+			return true
+		}, 5, 10))
+	}()
+
+	// 短暂延迟后取消上下文
+	time.Sleep(5 * time.Millisecond)
+	cancel()
+
+	wg.Wait() // 等待goroutine退出
+
+	// 验证管道已关闭
+	_, open := <-p.inChan
+	assert.False(t, open, "Channel should be closed after context cancellation")
+}
+
+// 获取当前 goroutine 的唯一 ID
+func getGoroutineID() uint64 {
+	b := make([]byte, 64)
+	b = b[:runtime.Stack(b, false)]
+	// 从堆栈信息中提取 goroutine ID
+	id := uint64(0)
+	for i := 10; i < len(b) && b[i] >= '0' && b[i] <= '9'; i++ {
+		id = id*10 + uint64(b[i]-'0')
+	}
+	return id
+}
+
+// 测试并行 Filter 的 goroutine 数量
+func TestPipeFilterParallelGoroutines(t *testing.T) {
+	ctx := context.Background()
+	data := make([]int, 1000)
+	for i := range data {
+		data[i] = i
+	}
+
+	p := FromSlice(data, ctx)
+
+	// 用于跟踪活跃的 goroutine
+	var (
+		activeGoroutines sync.Map
+		maxConcurrent    int32
+		currentCount     int32
+		wg               sync.WaitGroup
+	)
+
+	// 设置并行度为 5
+	const parallelism = 5
+
+	filteredPipe := Filter(p, func(e int) bool {
+		// 记录当前 goroutine
+		goroutineID := getGoroutineID()
+		activeGoroutines.Store(goroutineID, true)
+
+		// 更新最大并发数
+		current := atomic.AddInt32(&currentCount, 1)
+		for {
+			max := atomic.LoadInt32(&maxConcurrent)
+			if current > max {
+				if atomic.CompareAndSwapInt32(&maxConcurrent, max, current) {
+					break
+				}
+			} else {
+				break
+			}
+		}
+
+		// 模拟工作负载
+		time.Sleep(5 * time.Millisecond)
+
+		atomic.AddInt32(&currentCount, -1)
+		return e%2 == 0
+	}, parallelism, 20) // 并行度5，缓冲区20
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		result := Collect(filteredPipe)
+		// 验证结果正确性
+		assert.Len(t, result, 500, "Should filter out 50 even numbers")
+	}()
+
+	wg.Wait()
+
+	// 统计实际使用的 goroutine 数量
+	goroutineCount := 0
+	activeGoroutines.Range(func(key, value interface{}) bool {
+		goroutineCount++
+		return true
+	})
+
+	// 验证结果
+	assert.Equal(t, parallelism, goroutineCount,
+		"Should use exactly %d goroutines", parallelism)
+
+	assert.Equal(t, int32(parallelism), maxConcurrent,
+		"Should reach %d concurrent executions", parallelism)
+}
+
+// 测试并行 Map 的处理顺序
+func TestPipeMapParallelOrder(t *testing.T) {
+	ctx := context.Background()
+	data := make([]int, 100)
+	for i := range data {
+		data[i] = i
+	}
+
+	p := FromSlice(data, ctx)
+
+	// 使用通道确保并行处理
+	processingOrder := make(chan int, 100)
+
+	// 设置并行度为 10
+	mappedPipe := Map(p, func(e int) int {
+		// 记录处理顺序
+		processingOrder <- e
+		time.Sleep(time.Duration(e%10) * time.Millisecond)
+		return e
+	}, 10, 20)
+
+	result := Collect(mappedPipe)
+
+	close(processingOrder)
+
+	// 收集处理顺序
+	var order []int
+	for e := range processingOrder {
+		order = append(order, e)
+	}
+
+	// 验证结果
+	assert.Len(t, result, 100, "Should process all elements")
+
+	// 验证处理顺序不是顺序的（证明并行处理）
+	isSequential := true
+	for i := range order {
+		if i > 0 && order[i] < order[i-1] {
+			isSequential = false
+			break
+		}
+	}
+
+	assert.False(t, isSequential,
+		"Processing order should not be sequential in parallel execution")
 }

@@ -7,6 +7,7 @@ import (
 )
 
 type Iterator[E any] interface {
+	// Next()需要保证是线程安全的
 	Next() (E, bool)
 }
 
@@ -132,7 +133,6 @@ func Collect[E any](it Iterator[E]) []E {
 // some default value
 func Group[K comparable, E, R any](it Iterator[E], extract func(E) (K, R)) map[K][]R {
 	m := make(map[K][]R)
-	// for e, ok := it.Next(); ok; e, ok = it.Next() {
 	for e := range Iter(it) {
 		k, r := extract(e)
 		m[k] = append(m[k], r)
