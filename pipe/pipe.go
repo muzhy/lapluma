@@ -113,6 +113,42 @@ func Map[T, R any](inPipe *Pipe[T], trans func(T) R) *Pipe[R] {
 	}
 }
 
+func TryMap[T, R any](inPipe *Pipe[T], trans func(T) (R, error)) *Pipe[R] {
+	outChan := make(chan R)
+
+	go func() {
+		defer close(outChan)
+		for {
+			select {
+			case <-inPipe.ctx.Done():
+				return
+			case data, ok := <-inPipe.inChan:
+				if !ok {
+					return // channel closed
+				}
+
+				r, err := trans(data)
+				if err != nil {
+					// On error, drop the element and continue.
+					continue
+				}
+
+				// Send the successful result.
+				select {
+				case outChan <- r:
+				case <-inPipe.ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+
+	return &Pipe[R]{
+		inChan: outChan,
+		ctx:    inPipe.ctx,
+	}
+}
+
 func Reduce[E, R any](input *Pipe[E], handler func(R, E) R, initial R) R {
 	for data := range input.inChan {
 		initial = handler(initial, data)

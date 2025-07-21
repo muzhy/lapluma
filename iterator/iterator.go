@@ -173,6 +173,36 @@ func Map[E, R any](it Iterator[E], handler func(E) R) Iterator[R] {
 	}
 }
 
+// TryMapIterator 用于处理那些可能会发生错误的操作
+type TryMapIterator[E, R any] struct {
+	handler func(E) (R, error)
+	input   Iterator[E]
+}
+
+func (it *TryMapIterator[E, R]) Next() (R, bool) {
+	for {
+		e, ok := it.input.Next()
+		if !ok {
+			var zero R
+			return zero, false
+		}
+
+		r, err := it.handler(e)
+		if err != nil {
+			// On error, skip this element and try the next one.
+			continue
+		}
+		return r, true
+	}
+}
+
+func TryMap[E, R any](it Iterator[E], handler func(E) (R, error)) Iterator[R] {
+	return &TryMapIterator[E, R]{
+		input:   it,
+		handler: handler,
+	}
+}
+
 func Reduce[E, R any](it Iterator[E], handler func(R, E) R, initial R) R {
 	// for e, ok := it.Next(); ok; e, ok = it.Next() {
 	for e := range Iter(it) {
