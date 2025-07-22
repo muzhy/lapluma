@@ -5,7 +5,7 @@
 
 ## 核心设计
 
-本库的核心在于**简洁性**和**可组合性**。通过提供一组正交的、专注于单一功能的基础操作（如 `Map`, `Filter`, `Reduce`），开发者可以像拼接乐高积木一样，构建出清晰、可读、强大的数据处理流水线。
+本库的核心在于**简洁性**和**可组合性**。通过提供一组正交的、专注于单一功能的基础操作（如 `Map`, `Filter`, `Reduce`）构建出清晰、可读、强大的数据处理流水线。
 
 ## 核心概念
 
@@ -35,6 +35,15 @@ result := iterator.Collect(
         func(x int) bool { return x > 5 }
     )
 ) // [6, 8, 10]
+
+// 或者使用for-range直接处理迭代器结果:
+it := iterator.Filter(
+    iterator.Map(it, func(x int) int { return x * 2 }),
+    func(x int) bool { return x > 5 }
+)
+for data := range Iter(filteredIt) {
+	fmt.Printf("%v", data)
+}
 ```
 
 ### 2. `Pipe` - 并发数据流
@@ -135,3 +144,8 @@ sum := Reduce(intPipe, func(acc, n int) int { return acc + n }, 0)
 ```sh
 go test ./...
 ```
+
+# TODO 
+- 提供更丰富的转换操作, 如`Distinct`, `Zip`, `Peek`
+- 完善错误处理机制
+- 规范`Pipe`的并发控制参数
