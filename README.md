@@ -1,7 +1,7 @@
 # La Pluma: 一个轻盈的 Go 数据流处理库
 
 `La Pluma` 是一个微型、函数式风格的 Go 工具库，旨在提供一套简洁、可组合的数据处理工具。
-包含两个核心组件：`Iterator` 用于串行、拉取式的数据处理，`Pipe` 则基于 Go 的 channel 和 context 实现了并发、推送式的数据处理。
+包含两个核心组件：`Iterator` 用于串行的数据处理，`Pipe` 则基于 Go 的 channel 和 context 实现了并发的数据处理。
 
 ## 核心设计
 
@@ -48,7 +48,7 @@ for data := range Iter(filteredIt) {
 
 ### 2. `Pipe` - 并发数据流
 
-`Pipe` 是 `Iterator` 的并发版本。它基于 Go 的 channel 构建，每个操作（如 `Map`, `Filter`）都在一个独立的 goroutine 中运行，形成一条处理流水线。`Pipe` 采用“推送”模式，上游操作处理完数据后会主动推送给下游。
+`Pipe` 是 `Iterator` 的并发版本。它基于 Go 的 channel 构建，每个操作（如 `Map`, `Filter`）都在一个独立的 goroutine 中运行，形成一条处理流水线。
 
 所有的 `Pipe` 操作都与 `context.Context` 集成，可以轻松实现超时控制和优雅退出。
 
@@ -145,7 +145,7 @@ sum := Reduce(intPipe, func(acc, n int) int { return acc + n }, 0)
 go test ./...
 ```
 
-# TODO 
+# 后续计划
 - 提供更丰富的转换操作, 如`Distinct`, `Zip`, `Peek`
 - 完善错误处理机制
 - 规范`Pipe`的并发控制参数
