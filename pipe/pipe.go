@@ -26,6 +26,17 @@ func (p *Pipe[E]) Next() (E, bool) {
 	}
 }
 
+// send data to output channel,
+// if context done return false, else return true
+func sendToChan[T any](data T, output chan T, ctx context.Context) bool {
+	select {
+	case output <- data:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
 func Create[E any](inChan <-chan E, ctx context.Context) *Pipe[E] {
 	return &Pipe[E]{
 		inChan: inChan,
@@ -39,9 +50,7 @@ func FromSlice[E any](data []E, ctx context.Context) *Pipe[E] {
 	go func() {
 		defer close(output)
 		for _, d := range data {
-			select {
-			case output <- d:
-			case <-ctx.Done():
+			if !sendToChan(d, output, ctx) {
 				return
 			}
 		}
@@ -56,9 +65,7 @@ func FromIterator[E any](it iterator.Iterator[E], ctx context.Context) *Pipe[E] 
 	go func() {
 		defer close(output)
 		for data := range iterator.Iter(it) {
-			select {
-			case output <- data:
-			case <-ctx.Done():
+			if !sendToChan(data, output, ctx) {
 				return
 			}
 		}
@@ -106,10 +113,8 @@ func Filter[E any](input *Pipe[E], filter func(E) bool, size ...int) *Pipe[E] {
 			defer wg.Done()
 			for data := range iterator.Iter(input) {
 				if filter(data) {
-					select {
-					case <-input.ctx.Done():
+					if !sendToChan(data, output, input.ctx) {
 						return
-					case output <- data:
 					}
 				}
 			}
@@ -127,9 +132,7 @@ func Map[E, R any](inPipe *Pipe[E], trans func(E) R, size ...int) *Pipe[R] {
 		defer wg.Done()
 		for data := range iterator.Iter(inPipe) {
 			r := trans(data)
-			select {
-			case output <- r:
-			case <-inPipe.ctx.Done():
+			if !sendToChan(r, output, inPipe.ctx) {
 				return
 			}
 		}
@@ -147,9 +150,7 @@ func TryMap[T, R any](inPipe *Pipe[T], trans func(T) (R, error), size ...int) *P
 			if err != nil {
 				continue
 			}
-			select {
-			case output <- r:
-			case <-inPipe.ctx.Done():
+			if !sendToChan(r, output, inPipe.ctx) {
 				return
 			}
 		}
@@ -189,7 +190,7 @@ func Batch[E any](input *Pipe[E], batchSize int, timeout time.Duration) *Pipe[[]
 		defer close(output)
 		buffer := make([]E, 0, batchSize)
 		timer := time.NewTimer(timeout)
-
+		defer timer.Stop()
 		for {
 			select {
 			case <-input.ctx.Done():
@@ -197,10 +198,7 @@ func Batch[E any](input *Pipe[E], batchSize int, timeout time.Duration) *Pipe[[]
 			case data, ok := <-input.inChan:
 				if !ok {
 					if len(buffer) > 0 {
-						// output <- buffer
-						select {
-						case output <- buffer:
-						case <-input.ctx.Done():
+						if !sendToChan(buffer, output, input.ctx) {
 							return
 						}
 					}
@@ -209,10 +207,7 @@ func Batch[E any](input *Pipe[E], batchSize int, timeout time.Duration) *Pipe[[]
 
 				buffer = append(buffer, data)
 				if len(buffer) == batchSize {
-					// output <- buffer
-					select {
-					case output <- buffer:
-					case <-input.ctx.Done():
+					if !sendToChan(buffer, output, input.ctx) {
 						return
 					}
 					buffer = make([]E, 0, batchSize)
@@ -221,10 +216,7 @@ func Batch[E any](input *Pipe[E], batchSize int, timeout time.Duration) *Pipe[[]
 
 			case <-timer.C:
 				if len(buffer) > 0 {
-					// output <- buffer
-					select {
-					case output <- buffer:
-					case <-input.ctx.Done():
+					if !sendToChan(buffer, output, input.ctx) {
 						return
 					}
 					buffer = make([]E, 0, batchSize)
