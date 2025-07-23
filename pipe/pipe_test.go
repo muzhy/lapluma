@@ -12,9 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"lapluma/iterator"
-	// "lapluma/pipe"
-
+	"github.com/muzhy/lapluma/iterator"
 	"github.com/stretchr/testify/assert"
 )
 

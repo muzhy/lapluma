@@ -2,9 +2,10 @@ package pipe
 
 import (
 	"context"
-	"lapluma/iterator"
 	"sync"
 	"time"
+
+	"github.com/muzhy/lapluma/iterator"
 )
 
 type Pipe[E any] struct {

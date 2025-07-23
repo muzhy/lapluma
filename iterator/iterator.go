@@ -2,8 +2,9 @@ package iterator
 
 import (
 	"iter"
-	"lapluma"
 	"sync"
+
+	"github.com/muzhy/lapluma"
 )
 
 type Iterator[E any] interface {
