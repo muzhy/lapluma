@@ -208,26 +208,46 @@ func TestPipeParallelWithCancellation(t *testing.T) {
 	p := FromSlice(data, ctx)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
+	// processingStarted 用于确保在取消前，至少有一个 worker goroutine 已经开始处理任务
+	processingStarted := make(chan struct{})
+
+	// processedCount 用于记录实际处理的元素数量
+	var processedCount int64
 
 	// 启动处理
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		Collect(Filter(p, func(e int) bool {
-			time.Sleep(10 * time.Millisecond)
+
+		// 我们将 Collect 的结果收集起来，用于后续断言
+		result := Collect(Filter(p, func(e int) bool {
+			// 发送信号，表示处理已开始
+			// 使用 select 防止在 processingStarted 关闭后继续发送导致 panic
+			select {
+			case processingStarted <- struct{}{}:
+			default:
+			}
+
+			atomic.AddInt64(&processedCount, 1)
+			// 模拟一个耗时较长的操作
+			time.Sleep(20 * time.Millisecond)
 			return true
-		}, 5, 10))
+		}, 5, 10)) // 5个并发 worker
+
+		// 断言：由于上下文被取消，处理的元素数量应该远小于总数100
+		// 这个断言比检查 channel 是否关闭更直接地反映了“提前终止”这一行为
+		assert.Less(t, atomic.LoadInt64(&processedCount), int64(100), "process should cancel before complete")
+		assert.True(t, len(result) < 100, "collect result should less than 100")
 	}()
 
-	// 短暂延迟后取消上下文
-	time.Sleep(5 * time.Millisecond)
+	// 等待，直到至少一个 worker 开始处理数据
+	<-processingStarted
+
+	// 立刻取消上下文
 	cancel()
 
-	wg.Wait() // 等待goroutine退出
-
-	// 验证管道已关闭
-	_, open := <-p.inChan
-	assert.False(t, open, "Channel should be closed after context cancellation")
+	// 等待采集 goroutine 完全退出
+	wg.Wait()
 }
 
 // 获取当前 goroutine 的唯一 ID

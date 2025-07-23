@@ -46,6 +46,8 @@ for data := range Iter(filteredIt) {
 }
 ```
 
+`Iterator`的设计目的是用于串行处理的，不支持并发安全，如果需要并发能力，调用`pipe.FromIterator`将其转换为`Pipe`以获取并发能力
+
 ### 2. `Pipe` - 并发数据流
 
 `Pipe` 是 `Iterator` 的并发版本。它基于 Go 的 channel 构建，每个操作（如 `Map`, `Filter`）都在一个独立的 goroutine 中运行，形成一条处理流水线。

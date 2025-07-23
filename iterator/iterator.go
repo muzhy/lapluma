@@ -2,13 +2,12 @@ package iterator
 
 import (
 	"iter"
-	"sync"
 
 	"github.com/muzhy/lapluma"
 )
 
 type Iterator[E any] interface {
-	// Next()需要保证是线程安全的
+	// !!! 在任何转换迭代器的 Next() 方法内部，严禁使用 for-range 模式从上游迭代器获取数据。必须使用传统的、最高效的方式
 	Next() (E, bool)
 }
 
@@ -45,12 +44,14 @@ func (it *BaseIterator[E]) Next() (E, bool) {
 }
 
 // support function to help create iterator from slice and map
+// Iterator 用于串行处理场景，不支持并发，如果需要在并发场景下使用
+// 调用pipe.`FromIterator`将其转换为Pipe
 func FromSlice[E any](data []E) Iterator[E] {
 	cursor := 0
-	var mut sync.Mutex
+	// var mut sync.Mutex
 	next := func() (E, bool) {
-		mut.Lock()
-		defer mut.Unlock()
+		// mut.Lock()
+		// defer mut.Unlock()
 		if cursor < len(data) {
 			index := cursor
 			cursor++
@@ -65,20 +66,19 @@ func FromSlice[E any](data []E) Iterator[E] {
 	}
 }
 
-func MapKeysIt[K comparable, V any](data map[K]V) Iterator[K] {
+func FromMap[K comparable, V any](data map[K]V) Iterator[lapluma.Pair[K, V]] {
+	// keyIt := MapKeysIt(data)
+
 	keys := make([]K, 0, len(data))
 	for k := range data {
 		keys = append(keys, k)
 	}
-	return FromSlice(keys)
-}
-
-func FromMap[K comparable, V any](data map[K]V) Iterator[lapluma.Pair[K, V]] {
-	keyIt := MapKeysIt(data)
+	cursor := 0
 
 	next := func() (lapluma.Pair[K, V], bool) {
-		// for key, ok := keyIt.Next(); ok; key, ok = keyIt.Next() {
-		for key := range Iter(keyIt) {
+		if cursor < len(keys) {
+			key := keys[cursor]
+			cursor++
 			return lapluma.Pair[K, V]{
 				First:  key,
 				Second: data[key],
@@ -99,8 +99,8 @@ type FilterIterator[E any] struct {
 }
 
 func (it *FilterIterator[E]) Next() (E, bool) {
-	// for e, ok := it.input.Next(); ok; e, ok = it.input.Next() {
-	for e := range Iter(it.input) {
+	for e, ok := it.input.Next(); ok; e, ok = it.input.Next() {
+		// for e := range Iter(it.input) {
 		if it.filter(e) {
 			return e, true
 		}
@@ -157,8 +157,8 @@ func (it *MapIterator[E, R]) Next() (R, bool) {
 	if it.closed {
 		return it.stop()
 	}
-	// for e, ok := it.input.Next(); ok; e, ok = it.input.Next() {
-	for e := range Iter(it.input) {
+	for e, ok := it.input.Next(); ok; e, ok = it.input.Next() {
+		// for e := range Iter(it.input) {
 		return it.handler(e), true
 	}
 	return it.stop()
@@ -181,13 +181,7 @@ type TryMapIterator[E, R any] struct {
 }
 
 func (it *TryMapIterator[E, R]) Next() (R, bool) {
-	for {
-		e, ok := it.input.Next()
-		if !ok {
-			var zero R
-			return zero, false
-		}
-
+	for e, ok := it.input.Next(); ok; e, ok = it.input.Next() {
 		r, err := it.handler(e)
 		if err != nil {
 			// On error, skip this element and try the next one.
@@ -195,6 +189,8 @@ func (it *TryMapIterator[E, R]) Next() (R, bool) {
 		}
 		return r, true
 	}
+	var zero R
+	return zero, false
 }
 
 func TryMap[E, R any](it Iterator[E], handler func(E) (R, error)) Iterator[R] {

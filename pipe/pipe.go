@@ -64,7 +64,8 @@ func FromIterator[E any](it iterator.Iterator[E], ctx context.Context) *Pipe[E] 
 
 	go func() {
 		defer close(output)
-		for data := range iterator.Iter(it) {
+		// for data := range iterator.Iter(it) {
+		for data, ok := it.Next(); ok; data, ok = it.Next() {
 			if !sendToChan(data, output, ctx) {
 				return
 			}
@@ -111,7 +112,8 @@ func Filter[E any](input *Pipe[E], filter func(E) bool, size ...int) *Pipe[E] {
 	output := parallel(
 		func(wg *sync.WaitGroup, output chan E) {
 			defer wg.Done()
-			for data := range iterator.Iter(input) {
+			// for data := range iterator.Iter(input) {
+			for data, ok := input.Next(); ok; data, ok = input.Next() {
 				if filter(data) {
 					if !sendToChan(data, output, input.ctx) {
 						return
@@ -130,7 +132,8 @@ func Map[E, R any](inPipe *Pipe[E], trans func(E) R, size ...int) *Pipe[R] {
 
 	output := parallel(func(wg *sync.WaitGroup, output chan R) {
 		defer wg.Done()
-		for data := range iterator.Iter(inPipe) {
+		// for data := range iterator.Iter(inPipe) {
+		for data, ok := inPipe.Next(); ok; data, ok = inPipe.Next() {
 			r := trans(data)
 			if !sendToChan(r, output, inPipe.ctx) {
 				return
@@ -145,7 +148,8 @@ func TryMap[T, R any](inPipe *Pipe[T], trans func(T) (R, error), size ...int) *P
 	paralleism, buf := extractParallelParam(size...)
 	output := parallel(func(wg *sync.WaitGroup, output chan R) {
 		defer wg.Done()
-		for data := range iterator.Iter(inPipe) {
+		// for data := range iterator.Iter(inPipe) {
+		for data, ok := inPipe.Next(); ok; data, ok = inPipe.Next() {
 			r, err := trans(data)
 			if err != nil {
 				continue
