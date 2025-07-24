@@ -157,7 +157,7 @@ func (it *MapIterator[E, R]) Next() (R, bool) {
 	if it.closed {
 		return it.stop()
 	}
-	for e, ok := it.input.Next(); ok; e, ok = it.input.Next() {
+	if e, ok := it.input.Next(); ok {
 		// for e := range Iter(it.input) {
 		return it.handler(e), true
 	}
