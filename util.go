@@ -11,5 +11,12 @@ func (p *Pair[K, V]) Extra() (K, V) {
 
 type Result[T any] struct {
 	Value T
-	error
+	Err   error
+}
+
+func (r *Result[T]) Unwrap() T {
+	if r.Err != nil {
+		panic("Result is error")
+	}
+	return r.Value
 }

@@ -11,7 +11,7 @@
 
 ### 1. `Iterator` - 串行数据流
 
-`Iterator` 是一个标准的迭代器接口，它定义了对数据序列的逐一访问。它采用“拉取”模式，即消费者主动从迭代器中请求下一个数据。
+`Iterator` 是一个标准的迭代器接口，它定义了对数据序列的逐一访问。
 
 **主要操作:**
 - `FromSlice(data []E) Iterator[E]`: 从切片创建迭代器。
@@ -50,7 +50,7 @@ for data := range Iter(filteredIt) {
 
 ### 2. `Pipe` - 并发数据流
 
-`Pipe` 是 `Iterator` 的并发版本。它基于 Go 的 channel 构建，每个操作（如 `Map`, `Filter`）都在一个独立的 goroutine 中运行，形成一条处理流水线。
+`Pipe` 是 `Iterator` 的并发版本。它基于 Go 的 channel 构建，每个操作（如 `Map`, `Filter`）都在一组独立的 goroutine 中运行，形成一条处理流水线。
 
 所有的 `Pipe` 操作都与 `context.Context` 集成，可以轻松实现超时控制和优雅退出。
 
