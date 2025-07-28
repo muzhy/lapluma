@@ -7,7 +7,10 @@ import (
 )
 
 type Iterator[E any] interface {
-	// !!! 在任何转换迭代器的 Next() 方法内部，严禁使用 for-range 模式从上游迭代器获取数据。必须使用传统的、最高效的方式
+	// !!! 在任何转换迭代器的 Next() 方法内部，严禁使用 for-range 模式从上游迭代器获取数据。
+	// 必须使用传统的、最高效的方式
+	// 禁用 for-range 约束仅限于`Next()`，若使用 for-rang
+	// 每次调用Next都将创建一个iter.Seq对象，Collect等函数需要遍历，则影响不大
 	Next() (E, bool)
 }
 
