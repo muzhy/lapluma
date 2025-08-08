@@ -82,9 +82,14 @@ func parallel[E any](executer func(wg *sync.WaitGroup, output chan E), paralleis
 	go func() {
 		defer close(output)
 		defer wg.Wait()
+		wg.Add(paralleism)
 		for i := 0; i < paralleism; i++ {
-			wg.Add(1)
-			go executer(&wg, output)
+			// wg.Add(1)
+			// go executer(&wg, output)
+			go func() {
+				defer wg.Done()
+				executer(&wg, output)
+			}()
 		}
 	}()
 
@@ -131,7 +136,7 @@ func Map[E, R any](inPipe *Pipe[E], trans func(E) R, size ...int) *Pipe[R] {
 	paralleism, buf := extractParallelParam(size...)
 
 	output := parallel(func(wg *sync.WaitGroup, output chan R) {
-		defer wg.Done()
+		// defer wg.Done()
 		// for data := range iterator.Iter(inPipe) {
 		for data, ok := inPipe.Next(); ok; data, ok = inPipe.Next() {
 			r := trans(data)
