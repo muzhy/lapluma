@@ -140,10 +140,20 @@ sum := Reduce(intPipe, func(acc, n int) int { return acc + n }, 0)
 ### Other
 若需要收集`Map`过程中的错误,可以考虑使用在`util.go`中`Result[T]`作为返回值
 
+# 安装
+```sh
+go get github.com/muzhy/lapluma
+```
+
 # 运行测试
 ```sh
 go test ./...
 ```
+
+# A&Q
+Q: 为什么使用嵌套的方式而不是连接的方式？
+
+A: `lapluma`是基于泛型的，减少运行时的开销和在编译器完成类型安全的检查，但是`Go`的泛型机制不支持给方法提供类型参数，所以像`Map`这类功能无法通过方法的形式实现，只能使用嵌套的方式。为了保证接口的统一性，全部的功能都使用了嵌套的方式
 
 # 后续计划
 - 提供更丰富的转换操作, 如`Distinct`, `Zip`, `Peek`
