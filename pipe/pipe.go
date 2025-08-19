@@ -75,10 +75,9 @@ func FromIterator[E any](it iterator.Iterator[E], ctx context.Context) *Pipe[E] 
 	return Create(output, ctx)
 }
 
-func parallel[E any](executer func(wg *sync.WaitGroup, output chan E), paralleism int, bufSize int) <-chan E {
+func parallel[E any](executer func(output chan E), paralleism int, bufSize int) <-chan E {
 	var wg sync.WaitGroup
 	output := make(chan E, bufSize)
-
 	go func() {
 		defer close(output)
 		defer wg.Wait()
@@ -88,7 +87,7 @@ func parallel[E any](executer func(wg *sync.WaitGroup, output chan E), paralleis
 			// go executer(&wg, output)
 			go func() {
 				defer wg.Done()
-				executer(&wg, output)
+				executer(output)
 			}()
 		}
 	}()
@@ -115,8 +114,7 @@ func Filter[E any](input *Pipe[E], filter func(E) bool, size ...int) *Pipe[E] {
 	paralleism, buf := extractParallelParam(size...)
 
 	output := parallel(
-		func(wg *sync.WaitGroup, output chan E) {
-			defer wg.Done()
+		func(output chan E) {
 			// for data := range iterator.Iter(input) {
 			for data, ok := input.Next(); ok; data, ok = input.Next() {
 				if filter(data) {
@@ -135,9 +133,7 @@ func Filter[E any](input *Pipe[E], filter func(E) bool, size ...int) *Pipe[E] {
 func Map[E, R any](inPipe *Pipe[E], trans func(E) R, size ...int) *Pipe[R] {
 	paralleism, buf := extractParallelParam(size...)
 
-	output := parallel(func(wg *sync.WaitGroup, output chan R) {
-		// defer wg.Done()
-		// for data := range iterator.Iter(inPipe) {
+	output := parallel(func(output chan R) {
 		for data, ok := inPipe.Next(); ok; data, ok = inPipe.Next() {
 			r := trans(data)
 			if !sendToChan(r, output, inPipe.ctx) {
@@ -151,9 +147,7 @@ func Map[E, R any](inPipe *Pipe[E], trans func(E) R, size ...int) *Pipe[R] {
 
 func TryMap[T, R any](inPipe *Pipe[T], trans func(T) (R, error), size ...int) *Pipe[R] {
 	paralleism, buf := extractParallelParam(size...)
-	output := parallel(func(wg *sync.WaitGroup, output chan R) {
-		defer wg.Done()
-		// for data := range iterator.Iter(inPipe) {
+	output := parallel(func(output chan R) {
 		for data, ok := inPipe.Next(); ok; data, ok = inPipe.Next() {
 			r, err := trans(data)
 			if err != nil {
